@@ -380,7 +380,7 @@ ConfigureBond()
 }
 
 #
-# InstallDependencies - will install iperf, omping, netcat, etc
+# InstallDependencies - will install iperf, netcat, etc
 #
 InstallDependencies()
 {
@@ -450,21 +450,6 @@ InstallDependencies()
 	                exit 1
 	            fi
 	        fi
-
-	        # Check omping
-	        omping -V > /dev/null 2>&1
-			if [ $? -ne 0 ]; then
-	            zypper addrepo http://download.opensuse.org/repositories/home:emendonca/SLE_12_SP2/home:emendonca.repo
-	            zypper --gpg-auto-import-keys refresh
-	            zypper --non-interactive in omping
-	            if [ $? -ne 0 ]; then
-	                msg="ERROR: Failed to install omping"
-	                LogMsg "$msg"
-	                UpdateSummary "$msg"
-	                SetTestStateFailed
-	                exit 1
-	            fi
-			fi
             ;;
 
         ubuntu*)
@@ -582,19 +567,6 @@ InstallDependencies()
 	                exit 1
 	            fi
             fi
-
-	        # Check omping
-	        omping -V > /dev/null 2>&1
-			if [ $? -ne 0 ]; then
-	            yum install omping -y
-	            if [ $? -ne 0 ]; then
-	                msg="ERROR: Failed to install omping"
-	                LogMsg "$msg"
-	                UpdateSummary "$msg"
-	                SetTestStateFailed
-	                exit 1
-	            fi	
-			fi
 
         ;;
         *)
