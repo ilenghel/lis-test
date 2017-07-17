@@ -49,7 +49,7 @@ foreach ($p in $params) {
 
     switch ($fields[0].Trim()) {
         "rootDir"   { $rootDir = $fields[1].Trim() }
-	"TC_COVERED" { $TC_COVERED = $fields[1].Trim() }
+		"TC_COVERED" { $TC_COVERED = $fields[1].Trim() }
         "sshKey" { $sshKey  = $fields[1].Trim() }
         "ipv4"   { $ipv4    = $fields[1].Trim() }
         "crashkernel"   { $crashkernel    = $fields[1].Trim() }
@@ -57,6 +57,7 @@ foreach ($p in $params) {
         "NMI" { $nmi = $fields[1].Trim() }
         "VM2NAME" { $vm2Name = $fields[1].Trim() }
 		"use_nfs" { $use_nfs = $fields[1].Trim() }
+		"VCPU" { $vcpu = $fields[1].Trim() }
         default  {}
     }
 }
@@ -112,27 +113,40 @@ if ($vm2Name -And $use_nfs -eq "yes")
         {
             "Warning: $vm2Name never started KVP"
         }
-
-       Start-Sleep 10
-
-        $vm2ipv4 = GetIPv4 $vm2Name $hvServer
-
-        $timeout = 200 #seconds
-        if (-not (WaitForVMToStartSSH $vm2ipv4 $timeout))
-        {
-            "Error: VM ${vm2Name} never started"
-            Stop-VM $vm2Name -ComputerName $hvServer -force | out-null
-            return $False
-        }
-
+		
     "Info: Succesfully started dependency VM ${vm2Name}"
     }
+	
+	Start-Sleep 10
+
+	$vm2ipv4 = GetIPv4 $vm2Name $hvServer
+	if (-not $?)
+	{
+		"Error: Unable to get IP for VM2."
+	
+		return $False
+	}
+
+	$timeout = 200 #seconds
+	if (-not (WaitForVMToStartSSH $vm2ipv4 $timeout))
+	{
+		"Error: VM ${vm2Name} never started"
+		Stop-VM $vm2Name -ComputerName $hvServer -force | out-null
+		return $False
+	}
 
     # Configure NFS for kdump
+	SendFileToVM $vm2ipv4 $sshKey "remote-scripts/ica/kdump_nfs_config.sh" "/root/kdump_nfs_config.sh"
+	if (-not $?)
+    {
+		Write-Host "Error: Unable to send NFS config file to $vm2Name" | Tee-Object -Append -file $summaryLog
+        return $False
+    }
+	
     $retVal = SendCommandToVM $vm2ipv4 $sshKey "cd /root && dos2unix kdump_nfs_config.sh && chmod u+x kdump_nfs_config.sh && ./kdump_nfs_config.sh"
     if ($retVal -eq $False)
     {
-        Write-Output "Error: Failed to configure the NFS server!"
+        Write-Output "Error: Failed to configure the NFS server!" | Tee-Object -Append -file $summaryLog
         return $false
     }
 }
@@ -141,9 +155,9 @@ if ($vm2Name -And $use_nfs -eq "yes")
 # Configure kdump on the VM
 #
 $retVal = SendCommandToVM $ipv4 $sshKey "cd /root && dos2unix kdump_config.sh && chmod u+x kdump_config.sh && ./kdump_config.sh $crashkernel $vm2ipv4"
-if ($retVal -eq $False)
+if ($retVal -ne $true)
 {
-    Write-Output "Error: Failed to configure kdump. Check logs for details."
+    Write-Output "Error: Failed to configure kdump. Check logs for details." | Tee-Object -Append -file $summaryLog
     return $false
 }
 #
@@ -192,9 +206,9 @@ else {
 # Give the host a few seconds to record the event
 #
 Write-Output "Waiting 200 seconds to record the event..."
-Start-Sleep -S 200
+Start-Sleep -S 100
 if ((Get-VMIntegrationService -VMName $vmName -ComputerName $hvServer | ?{$_.name -eq "Heartbeat"}).PrimaryStatusDescription -eq "Lost Communication") {
-    Write-Output "Error : Lost Communication to VM"
+    Write-Output "Error : Lost Communication to VM" | Tee-Object -Append -file $summaryLog
     Stop-VM -Name $vmName -ComputerName $hvServer -Force
     return $False
 }
@@ -206,7 +220,7 @@ Write-Output "Checking the VM connection after kernel panic..."
 
 $sts = WaitForVMToStartSSH $ipv4 100
 if (-not $sts[-1]){
-    Write-Output "Error: $vmName didn't restart after triggering the crash"
+    Write-Output "Error: $vmName didn't restart after triggering the crash" | Tee-Object -Append -file $summaryLog
     return $false
 }
 
@@ -218,7 +232,7 @@ Write-Output "Connection to VM is good. Checking the results..."
 $retVal = SendCommandToVM $ipv4 $sshKey "cd /root && dos2unix kdump_results.sh && chmod u+x kdump_results.sh && ./kdump_results.sh $vm2ipv4"
 if ($retVal -eq $False)
 {
-    Write-Output "Error: Results are not as expected. Check logs for details."
+    Write-Output "Error: Results are not as expected. Check logs for details." | Tee-Object -Append -file $summaryLog
     bin\pscp -q -i ssh\${sshKey} root@${ipv4}:summary.log $logdir
     return $false
 }

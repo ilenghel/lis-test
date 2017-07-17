@@ -87,8 +87,15 @@ ConfigRhel()
         UpdateTestState "TestAborted"
         exit 1
     fi
+	
+	#disable firewall in case it is running
+	ls -l /sbin/init | grep systemd
+	if [ $? -ne 0 ]; then
+		service iptables stop
+	else
+		systemctl stop firewalld
+	fi
 }
-
 
 #######################################################################
 #

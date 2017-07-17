@@ -128,7 +128,7 @@ case $distro in
         fi
     ;;
     "SLES")
-        if [ $vm2ipv4 != "" ]; then
+        if [[ $vm2ipv4 != "" ]]; then
             status=`ssh -i /root/.ssh/${ssh_key} -o StrictHostKeyChecking=no root@${vm2ipv4} "find /mnt/* -type f -size +10M; echo $?"`
             VerifyRemoteStatus
         else
