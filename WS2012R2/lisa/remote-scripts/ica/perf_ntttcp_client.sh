@@ -510,6 +510,13 @@ if [ -d  $HOME/$log_folder ]; then
     rm -rf $HOME/$log_folder
 fi
 
+#If the protocol used is UDP 2 more parameters have to be supplied to ntttcp
+UDP_params=""
+if [ $NET_PROTOCOL == "UDP" ]; then
+    $UDP_params="-u -b ${NTTTCP_BUFFER}"
+    LogMsg "Info: Testing UDP protocol with block size ${NTTTCP_BUFFER}" >> ~/summary.log
+fi
+
 mkdir $HOME/$log_folder
 # Determine test type lagscope/ntttcp
 if [[ "${TEST_TYPE:-UNDEFINED}" = "UNDEFINED" ]] || [[ "${TEST_TYPE}" = "ntttcp" ]]; then
@@ -544,7 +551,7 @@ if [[ "${TEST_TYPE:-UNDEFINED}" = "UNDEFINED" ]] || [[ "${TEST_TYPE}" = "ntttcp"
         echo "======================================"
         echo "Running Test: $num_threads_P X $num_threads_n"
         echo "======================================"
-        ssh -i $HOME/.ssh/${SSH_PRIVATE_KEY} -f -o StrictHostKeyChecking=no ${SERVER_OS_USERNAME}@${STATIC_IP2} "ulimit -n 20480 && ntttcp -r${SERVER_IP} -P $num_threads_P -e ${ipVersion} > $HOME/$log_folder/ntttcp-receiver-p${num_threads_P}X${num_threads_n}.log"
+        ssh -i $HOME/.ssh/${SSH_PRIVATE_KEY} -f -o StrictHostKeyChecking=no ${SERVER_OS_USERNAME}@${STATIC_IP2} "ulimit -n 20480 && ntttcp ${UDP_params} -r${SERVER_IP} -P $num_threads_P -e ${ipVersion} > $HOME/$log_folder/ntttcp-receiver-p${num_threads_P}X${num_threads_n}.log"
         ssh -i $HOME/.ssh/${SSH_PRIVATE_KEY} -f -o StrictHostKeyChecking=no ${SERVER_OS_USERNAME}@${STATIC_IP2} "lagscope -r${SERVER_IP} ${ipVersion}"
         sleep 1
         ssh -i $HOME/.ssh/${SSH_PRIVATE_KEY} -f -o StrictHostKeyChecking=no ${SERVER_OS_USERNAME}@${STATIC_IP2} "for ((i=1;i<=$TEST_DURATION;i++)); do ss -ta | grep ESTA | grep -v ssh | wc -l >> $HOME/$log_folder/tcp-connections-p${current_test_threads}.log; sleep 1; done"
@@ -557,7 +564,7 @@ if [[ "${TEST_TYPE:-UNDEFINED}" = "UNDEFINED" ]] || [[ "${TEST_TYPE}" = "ntttcp"
         mpstat -P ALL 1 ${TEST_DURATION} > "$HOME/$log_folder/mpstat-sender-p${current_test_threads}.log" &
 
         lagscope -s${SERVER_IP} -t ${TEST_DURATION} -V ${ipVersion} > "./$log_folder/lagscope-ntttcp-p${num_threads_P}X${num_threads_n}.log" &
-        ntttcp -s${SERVER_IP} -P $num_threads_P -n $num_threads_n -t ${TEST_DURATION} ${ipVersion} -f${port} > "./$log_folder/ntttcp-sender-p${num_threads_P}X${num_threads_n}.log"
+        ntttcp ${UDP_params} -s${SERVER_IP} -P $num_threads_P -n $num_threads_n -t ${TEST_DURATION} ${ipVersion} -f${port} > "./$log_folder/ntttcp-sender-p${num_threads_P}X${num_threads_n}.log"
         sts=$?
 
         current_tx_bytes=$(get_tx_bytes $ETH_NAME)
